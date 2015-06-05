@@ -1,4 +1,4 @@
-package barry.opencvd2;
+package openCV;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -49,7 +49,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-public class Opencvd2Activity extends Activity implements CvCameraViewListener {
+public class OpenCVActivity extends Activity implements CvCameraViewListener {
 
     public static final int VIEW_MODE_COLOR_DETECTION = 9;
     public static int viewMode = VIEW_MODE_COLOR_DETECTION;
