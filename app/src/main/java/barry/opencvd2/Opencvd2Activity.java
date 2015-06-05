@@ -1,74 +1,5 @@
 package barry.opencvd2;
 
-/*
-This code to go into CameraBridgeViewBase in 
-order to scale the bitmap to the size of the screen
- 
-The file is at:
- 
-[your path to the sdk]\OpenCV-2.4.4-android-sdk\sdk\java\src\org\opencv\android
-
-   protected void deliverAndDrawFrame(CvCameraViewFrame frame) {
-       Mat modified;
-
-       if (mListener != null) {
-           modified = mListener.onCameraFrame(frame);
-       } else {
-           modified = frame.rgba();
-       }
-
-       boolean bmpValid = true;
-       if (modified != null) {
-           try {
-               Utils.matToBitmap(modified, mCacheBitmap);
-           } catch(Exception e) {
-               Log.e(TAG, "Mat type: " + modified);
-               Log.e(TAG, "Bitmap type: " + mCacheBitmap.getWidth() + "*" + mCacheBitmap.getHeight());
-               Log.e(TAG, "Utils.matToBitmap() throws an exception: " + e.getMessage());
-               bmpValid = false;
-           }
-       }
-
-       if (bmpValid && mCacheBitmap != null) {
-           Canvas canvas = getHolder().lockCanvas();
-           if (canvas != null) {
-               canvas.drawColor(0, android.graphics.PorterDuff.Mode.CLEAR);
-               
-               
-               /////////////////////////////////////////////////////
-               ////// THIS IS THE CHANGED PART /////////////////////
-               int width = mCacheBitmap.getWidth();
-               int height = mCacheBitmap.getHeight();
-               float scaleWidth = ((float) canvas.getWidth()) / width;
-               float scaleHeight = ((float) canvas.getHeight()) / height;
-               float fScale = Math.min(scaleHeight,  scaleWidth);
-               // CREATE A MATRIX FOR THE MANIPULATION
-               Matrix matrix = new Matrix();
-               // RESIZE THE BITMAP
-               matrix.postScale(fScale, fScale);
-
-               /////////////////////////////////////////////////////
-
-               // RECREATE THE NEW BITMAP
-               Bitmap resizedBitmap = Bitmap.createBitmap(mCacheBitmap, 0, 0, width, height, matrix, false);
-               
-               canvas.drawBitmap(resizedBitmap, (canvas.getWidth() - resizedBitmap.getWidth()) / 2, (canvas.getHeight() - resizedBitmap.getHeight()) / 2, null);
-               if (mFpsMeter != null) {
-                   mFpsMeter.measure();
-                   mFpsMeter.draw(canvas, 20, 30);
-               }
-               getHolder().unlockCanvasAndPost(canvas);
-           }
-       }
-   }
-
-
-
-*
-*
-*/
-
-
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
@@ -108,7 +39,6 @@ import org.opencv.highgui.Highgui;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.imgproc.Moments;
 import org.opencv.objdetect.CascadeClassifier;
-import org.opencv.video.Video;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -116,32 +46,19 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 
 public class Opencvd2Activity extends Activity implements CvCameraViewListener {
 
-    public static final int VIEW_MODE_RGBA = 0;
-    public static final int VIEW_MODE_HOUGHCIRCLES = 1;
-    public static final int VIEW_MODE_HOUGHLINES = 2;
-    public static final int VIEW_MODE_CANNY = 3;
-    public static final int VIEW_MODE_COLCONTOUR = 4;
-    public static final int VIEW_MODE_OPFLOW = 8;
     public static final int VIEW_MODE_COLOR_DETECTION = 9;
-
-
-    public static int viewMode = VIEW_MODE_RGBA;
+    public static int viewMode = VIEW_MODE_COLOR_DETECTION;
 
     private CascadeClassifier mCascade;
 
-    private boolean bShootNow = false, bDisplayTitle = true, bFirstFaceSaved = false;
-
+    private boolean bShootNow = false, bDisplayTitle = true;
     private byte[] byteColourTrackCentreHue;
-
-    private double d, dTextScaleFactor, x1, x2, y1, y2;
-
-    private double[] vecHoughLines;
+    private double dTextScaleFactor;
 
     private int iLastX = 0;
     private int iLastY = 0;
@@ -149,11 +66,8 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
     private Point pt, pt1, pt2;
 
     private int x, y, radius, iMinRadius, iMaxRadius, iCannyLowerThreshold,
-            iCannyUpperThreshold, iAccumulator, iLineThickness = 3,
-            iHoughLinesThreshold = 50, iHoughLinesMinLineSize = 20,
-            iHoughLinesGap = 20, iMaxFaceHeight, iMaxFaceHeightIndex,
-            iFileOrdinal = 0, iCamera = 0, iNumberOfCameras = 0, iGFFTMax = 40,
-            iContourAreaMin = 1000;
+            iCannyUpperThreshold, iAccumulator, iMaxFaceHeight, iMaxFaceHeightIndex,
+            iFileOrdinal = 0, iNumberOfCameras = 0;
 
     private JavaCameraView mOpenCvCameraView0;
     private JavaCameraView mOpenCvCameraView1;
@@ -287,7 +201,7 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
     public void onResume() {
         super.onResume();
 
-        viewMode = VIEW_MODE_RGBA;
+        viewMode = VIEW_MODE_COLOR_DETECTION;
 
         OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_9, this, mLoaderCallback);
     }
@@ -313,30 +227,6 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
         if (item.getItemId() == R.id.action_info) {
             Intent myIntent1 = new Intent(Intent.ACTION_VIEW, Uri.parse("http://www.barrythomas.co.uk/machinevision.html"));
             startActivity(myIntent1);
-        } else if (item.getItemId() == R.id.action_rgbpreview) {
-            viewMode = VIEW_MODE_RGBA;
-            lFrameCount = 0;
-            lMilliStart = 0;
-        } else if (item.getItemId() == R.id.action_cannyedges) {
-            viewMode = VIEW_MODE_CANNY;
-            lFrameCount = 0;
-            lMilliStart = 0;
-        } else if (item.getItemId() == R.id.action_houghcircles) {
-            viewMode = VIEW_MODE_HOUGHCIRCLES;
-            lFrameCount = 0;
-            lMilliStart = 0;
-        } else if (item.getItemId() == R.id.action_houghlines) {
-            viewMode = VIEW_MODE_HOUGHLINES;
-            lFrameCount = 0;
-            lMilliStart = 0;
-        } else if (item.getItemId() == R.id.action_colourcontour) {
-            viewMode = VIEW_MODE_COLCONTOUR;
-            lFrameCount = 0;
-            lMilliStart = 0;
-        } else if (item.getItemId() == R.id.action_opflow) {
-            viewMode = VIEW_MODE_OPFLOW;
-            lFrameCount = 0;
-            lMilliStart = 0;
         } else if (item.getItemId() == R.id.action_color_detection) {
             viewMode = VIEW_MODE_COLOR_DETECTION;
         } else
@@ -411,9 +301,9 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
         pt1 = new Point(0, 0);
         pt2 = new Point(0, 0);
 
-        pts = new ArrayList<Point>();
+        pts = new ArrayList<>();
 
-        ranges = new ArrayList<Float>();
+        ranges = new ArrayList<>();
         ranges.add(50.0f);
         ranges.add(256.0f);
         rect = new Rect();
@@ -490,266 +380,10 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
 
         switch (viewMode) {
 
-            case VIEW_MODE_RGBA:
-
-                if (bDisplayTitle)
-                    ShowTitle("BGR Preview", 1, colorGreen);
-
-                break;
-
-
-            case VIEW_MODE_CANNY:
-
-                Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_RGBA2GRAY);
-
-                // doing a gaussian blur prevents getting a lot of false hits
-                Imgproc.GaussianBlur(mGray, mGray, sSize5, 2, 2);
-
-                iCannyLowerThreshold = 35;
-                iCannyUpperThreshold = 75;
-
-                Imgproc.Canny(mGray, mIntermediateMat, iCannyLowerThreshold, iCannyUpperThreshold);
-
-                contours.clear();
-                Imgproc.findContours(mIntermediateMat, contours, mContours, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-                MatOfPoint2f approx = new MatOfPoint2f();
-                List<Rect> boundRect = new ArrayList<>();
-                for(int i = 0; i<contours.size(); i++ ) {
-                    MatOfPoint2f currentContour = new MatOfPoint2f(contours.get(i).toArray());
-                    Imgproc.approxPolyDP(currentContour, approx, Imgproc.arcLength(currentContour, true) * 0.02, true);
-                    if (Math.abs(Imgproc.contourArea(contours.get(i))) < 2 || !Imgproc.isContourConvex(contours.get(i))) {
-                        continue;
-                    }
-                    if (approx.total() ==  4) {
-                        Rect r = Imgproc.boundingRect(contours.get(i));
-                        boundRect.add(r);
-                    }
-                }
-//                mRgba = oldImage;
-
-                Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2BGRA, 4);
-
-                for (int i = 0; i < boundRect.size(); i++) {
-                    Rect r = boundRect.get(i);
-                    Core.rectangle(mRgba, r.tl(), r.br(), colorRed , 5);
-                }
-                if (bDisplayTitle)
-                    ShowTitle("Canny Edges", 1, colorGreen);
-
-                break;
-
-            case VIEW_MODE_COLCONTOUR:
-
-                // Convert the image into an HSV image
-
-                Imgproc.cvtColor(mRgba, mHSVMat, Imgproc.COLOR_RGB2HSV, 3);
-
-                Core.inRange(mHSVMat, new Scalar(byteColourTrackCentreHue[0] - 10, 100, 100),
-                        new Scalar(byteColourTrackCentreHue[0] + 10, 255, 255), mHSVMat);
-
-                // Here i'm only using the external contours and by
-                // eroding we make the draw a teeny bit faster and the result a lot smoother
-                // on the rough edges where the colour fades out of range by losing a lot
-                // of the little spiky corners.
-
-                Imgproc.erode(mHSVMat, mHSVMat, mErodeKernel);
-                contours.clear();
-
-                for (x = 0; x < contours.size(); x++) {
-                    d = Imgproc.contourArea(contours.get(x));
-
-                    // get an approximation of the contour (last but one param is the min required
-                    // distance between the real points and the new approximation (in pixels)
-
-                    // contours is a List<MatOfPoint>
-                    // so contours.get(x) is a single MatOfPoint
-                    // but to use approxPolyDP we need to pass a MatOfPoint2f
-                    // so we need to do a conversion
-
-                    contours.get(x).convertTo(mMOP2f1, CvType.CV_32FC2);
-
-                    if (d > iContourAreaMin) {
-
-                        Imgproc.approxPolyDP(mMOP2f1, mMOP2f2, 2, true);
-
-                        // convert back to MatOfPoint and put it back in the list
-                        mMOP2f2.convertTo(contours.get(x), CvType.CV_32S);
-
-                        // draw the contour itself
-                        Imgproc.drawContours(mRgba, contours, x, colorRed, iLineThickness);
-
-                    }
-                }
-
-                if (bDisplayTitle)
-                    ShowTitle("Colour Contours", 1, colorGreen);
-
-                break;
-            case VIEW_MODE_HOUGHCIRCLES:
-
-                Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_RGBA2GRAY);
-
-                // doing a gaussian blur prevents getting a lot of false hits
-                Imgproc.GaussianBlur(mGray, mGray, sSize5, 2, 2);
-
-                // the lower this figure the more spurious circles you get
-                // 50 looks good in CANNY, but 100 is better when converting that into Hough circles
-                iCannyUpperThreshold = 100;
-
-                Imgproc.HoughCircles(mGray, mIntermediateMat, Imgproc.CV_HOUGH_GRADIENT, 2.0, mGray.rows() / 8,
-                        iCannyUpperThreshold, iAccumulator, iMinRadius, iMaxRadius);
-
-                if (mIntermediateMat.cols() > 0)
-                    for (int x = 0; x < Math.min(mIntermediateMat.cols(), 10); x++) {
-                        double vCircle[] = mIntermediateMat.get(0, x);
-
-                        if (vCircle == null)
-                            break;
-
-                        pt.x = Math.round(vCircle[0]);
-                        pt.y = Math.round(vCircle[1]);
-                        radius = (int) Math.round(vCircle[2]);
-                        // draw the found circle
-                        Core.circle(mRgba, pt, radius, colorRed, iLineThickness);
-
-                        // draw a cross on the centre of the circle
-                        DrawCross(mRgba, colorRed, pt);
-                    }
-
-                if (bDisplayTitle)
-                    ShowTitle("Hough Circles", 1, colorGreen);
-
-                break;
-
-            case VIEW_MODE_HOUGHLINES:
-
-                Imgproc.cvtColor(mRgba, mGray, Imgproc.COLOR_RGBA2GRAY);
-
-                // doing a gaussian blur prevents getting a lot of false hits
-                Imgproc.GaussianBlur(mGray, mGray, sSize5, 2, 2);
-
-
-                // the lower this figure the more spurious circles you get
-                // 50 upper looks good in CANNY, but 75 is better when converting that into Hough circles
-                iCannyLowerThreshold = 45;
-                iCannyUpperThreshold = 75;
-
-                Imgproc.Canny(mGray, mGray, iCannyLowerThreshold, iCannyUpperThreshold);
-
-                Imgproc.HoughLinesP(mGray, lines, 1, Math.PI / 180, iHoughLinesThreshold, iHoughLinesMinLineSize, iHoughLinesGap);
-
-                for (int x = 0; x < Math.min(lines.cols(), 40); x++) {
-                    vecHoughLines = lines.get(0, x);
-
-                    if (vecHoughLines.length == 0)
-                        break;
-
-                    x1 = vecHoughLines[0];
-                    y1 = vecHoughLines[1];
-                    x2 = vecHoughLines[2];
-                    y2 = vecHoughLines[3];
-
-                    pt1.x = x1;
-                    pt1.y = y1;
-                    pt2.x = x2;
-                    pt2.y = y2;
-
-                    Core.line(mRgba, pt1, pt2, colorRed, 3);
-                }
-
-                if (bDisplayTitle)
-                    ShowTitle("Hough Lines", 1, colorGreen);
-
-                break;
-
-
-            case VIEW_MODE_OPFLOW:
-
-                if (mMOP2fptsPrev.rows() == 0) {
-
-                    //Log.d("Baz", "First time opflow");
-                    // first time through the loop so we need prev and this mats
-                    // plus prev points
-                    // get this mat
-                    Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
-
-                    // copy that to prev mat
-                    matOpFlowThis.copyTo(matOpFlowPrev);
-
-                    // get prev corners
-                    Imgproc.goodFeaturesToTrack(matOpFlowPrev, MOPcorners, iGFFTMax, 0.05, 20);
-                    mMOP2fptsPrev.fromArray(MOPcorners.toArray());
-
-                    // get safe copy of this corners
-                    mMOP2fptsPrev.copyTo(mMOP2fptsSafe);
-                } else {
-                    //Log.d("Baz", "Opflow");
-                    // we've been through before so
-                    // this mat is valid. Copy it to prev mat
-                    matOpFlowThis.copyTo(matOpFlowPrev);
-
-                    // get this mat
-                    Imgproc.cvtColor(mRgba, matOpFlowThis, Imgproc.COLOR_RGBA2GRAY);
-
-                    // get the corners for this mat
-                    Imgproc.goodFeaturesToTrack(matOpFlowThis, MOPcorners, iGFFTMax, 0.05, 20);
-                    mMOP2fptsThis.fromArray(MOPcorners.toArray());
-
-                    // retrieve the corners from the prev mat
-                    // (saves calculating them again)
-                    mMOP2fptsSafe.copyTo(mMOP2fptsPrev);
-
-                    // and save this corners for next time through
-
-                    mMOP2fptsThis.copyTo(mMOP2fptsSafe);
-                }
-
-        	
-           	/*
-           	Parameters:
-           		prevImg first 8-bit input image
-           		nextImg second input image
-           		prevPts vector of 2D points for which the flow needs to be found; point coordinates must be single-precision floating-point numbers.
-           		nextPts output vector of 2D points (with single-precision floating-point coordinates) containing the calculated new positions of input features in the second image; when OPTFLOW_USE_INITIAL_FLOW flag is passed, the vector must have the same size as in the input.
-           		status output status vector (of unsigned chars); each element of the vector is set to 1 if the flow for the corresponding features has been found, otherwise, it is set to 0.
-           		err output vector of errors; each element of the vector is set to an error for the corresponding feature, type of the error measure can be set in flags parameter; if the flow wasn't found then the error is not defined (use the status parameter to find such cases).
-            */
-                Video.calcOpticalFlowPyrLK(matOpFlowPrev, matOpFlowThis, mMOP2fptsPrev, mMOP2fptsThis, mMOBStatus, mMOFerr);
-
-                cornersPrev = mMOP2fptsPrev.toList();
-                cornersThis = mMOP2fptsThis.toList();
-                byteStatus = mMOBStatus.toList();
-
-                y = byteStatus.size() - 1;
-
-                for (x = 0; x < y; x++) {
-                    if (byteStatus.get(x) == 1) {
-                        pt = cornersThis.get(x);
-                        pt2 = cornersPrev.get(x);
-
-                        Core.circle(mRgba, pt, 5, colorRed, iLineThickness - 1);
-
-                        Core.line(mRgba, pt, pt2, colorRed, iLineThickness);
-                    }
-                }
-
-                //Log.d("Baz", "Opflow feature count: "+x);
-                if (bDisplayTitle)
-                    ShowTitle("Optical Flow", 1, colorGreen);
-
-                break;
 
 //            Color Detection
 //todo:
             case VIEW_MODE_COLOR_DETECTION :
-                int iLowH = 170;
-                int iHighH = 179;
-
-                int iLowS = 150;
-                int iHighS = 255;
-
-                int iLowV = 60;
-                int iHighV = 255;
                 // Convert the image into an HSV image
                 Imgproc.cvtColor(mRgba, mHSVMat, Imgproc.COLOR_RGB2HSV);
                 Mat mHsvt = mRgba.clone();
@@ -763,18 +397,18 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
 
 
                 //morphological opening (remove small objects from the foreground)
-                Imgproc.erode(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5)));
-                Imgproc.dilate(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5)));
+                Imgproc.erode(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5, 5)));
+                Imgproc.dilate(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5, 5)));
 
                 //morphological closing (fill small holes in the foreground)
-                Imgproc.dilate(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5)));
-                Imgproc.erode(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(5, 5)));
+                Imgproc.dilate(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5, 5)));
+                Imgproc.erode(mHsvt, mHsvt, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5, 5)));
                 Moments oMoments = Imgproc.moments(mHsvt);
                 double dM01 = oMoments.get_m01();
                 double dM10 = oMoments.get_m10();
                 double dArea = oMoments.get_m00();
 
-
+                String red;
                 // if the area <= 10000, I consider that the there are no object in the image and it's because of the noise, the area is not zero
                 if (dArea > 10000)
                 {
@@ -782,19 +416,26 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
                     int posX = (int)(dM10 / dArea);
                     int posY = (int)(dM01 / dArea);
 
-                    if (iLastX >= 0 && iLastY >= 0 && posX >= 0 && posY >= 0)
-                    {
-                        //Draw a red line from the previous point to the current point
-                        Core.circle(mHSVMat, new Point(posX, posY), 5, colorRed, 3);
-                    }
 
                     iLastX = posX;
                     iLastY = posY;
+                    red = "RED AREA";
+                } else {
+                    red = "";
                 }
+
+                List<MatOfPoint> contours = new ArrayList<>();
+                Imgproc.findContours(mHsvt, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+                Imgproc.drawContours(mHsvt, contours, -1, new Scalar(255,255,0));
+
+
                 mRgba = mHsvt;
+                //Draw a red line from the previous point to the current point
+                Core.putText(mRgba, red, new Point(iLastX, iLastY),
+                        Core.FONT_HERSHEY_SIMPLEX, dTextScaleFactor, colorRed, 2);
 
                 if (bDisplayTitle)
-                    ShowTitle("Color Detection", 1, colorRed);
+                    ShowTitle("Color Detection", 1, colorGreen);
                 break;
         }
 
@@ -839,35 +480,6 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
 
     }
 
-
-    public void DrawCross(Mat mat, Scalar color, Point pt) {
-        int iCentreCrossWidth = 24;
-
-        pt1.x = pt.x - (iCentreCrossWidth >> 1);
-        pt1.y = pt.y;
-        pt2.x = pt.x + (iCentreCrossWidth >> 1);
-        pt2.y = pt.y;
-
-        Core.line(mat, pt1, pt2, color, iLineThickness - 1);
-
-        pt1.x = pt.x;
-        pt1.y = pt.y + (iCentreCrossWidth >> 1);
-        pt2.x = pt.x;
-        pt2.y = pt.y - (iCentreCrossWidth >> 1);
-
-        Core.line(mat, pt1, pt2, color, iLineThickness - 1);
-
-    }
-
-
-    public Mat getHistogram(Mat mat) {
-        Imgproc.calcHist(Arrays.asList(mat), MOIone, new Mat(), mHist, histSize, MOFrange);
-
-        Core.normalize(mHist, mHist);
-
-        return mHist;
-    }
-
     @SuppressLint("SimpleDateFormat")
     public boolean SaveImage(Mat mat) {
 
@@ -884,7 +496,7 @@ public class Opencvd2Activity extends Activity implements CvCameraViewListener {
 
         File file = new File(path, filename);
 
-        Boolean bool = null;
+        Boolean bool;
         filename = file.toString();
         bool = Highgui.imwrite(filename, mIntermediateMat);
 
