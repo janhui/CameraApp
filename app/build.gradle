@@ -7,6 +7,11 @@ android {
         minSdkVersion 19
         targetSdkVersion 10
     }
+    packagingOptions {
+        exclude 'META-INF/LICENSE'
+//        exclude 'META-INF/LICENSE-FIREBASE.txt'
+        exclude 'META-INF/NOTICE'
+    }
     buildTypes {
         release {
             minifyEnabled false
@@ -19,4 +24,6 @@ android {
 
 dependencies {
     compile project(':libs:opencv')
+    compile 'com.firebase:firebase-client-android:2.3.0+'
+
 }
