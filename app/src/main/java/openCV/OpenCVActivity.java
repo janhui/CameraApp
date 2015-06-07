@@ -2,20 +2,19 @@ package openCV;
 
 import android.app.Activity;
 import android.content.Context;
-import android.content.Intent;
 import android.hardware.Camera;
-import android.net.Uri;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.view.Menu;
-import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.WindowManager;
 import android.widget.LinearLayout.LayoutParams;
-import android.widget.Toast;
 
+import com.firebase.client.DataSnapshot;
 import com.firebase.client.Firebase;
+import com.firebase.client.FirebaseError;
+import com.firebase.client.ValueEventListener;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener;
@@ -26,7 +25,6 @@ import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfPoint;
-import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
@@ -39,7 +37,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import Utils.Color;
 import Utils.Position;
@@ -73,7 +73,9 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
     private Size sSize3;
 
     private String mSessionName;
-    private Firebase ref;
+    private Firebase myFirebaseRef;
+    public static final String mPositionID = "position";
+
 
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -139,7 +141,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
 
         mSessionName = getIntent().getStringExtra(SessionActivity.SESSION_NAME);
         iNumberOfCameras = Camera.getNumberOfCameras();
-        ref = new Firebase("https://huddletableapp.firebaseio.com");
+        myFirebaseRef = new Firebase("https://huddletableapp.firebaseio.com");
         //Log.d(TAG, "called onCreate");
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -321,7 +323,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
             int posY = (int) (red_dM01 / red_dArea);
             mRedPosition = new Position(posX,posY);
             red = "RED AREA";
-            updatePosition(Color.Red, mSessionName, mRedPosition);
+            updatePosition(Color.Red, mRedPosition);
         } else {
             red = "";
             mRedPosition = new Position(0,0);
@@ -331,6 +333,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
             int posX = (int) (green_dM10 / green_dArea);
             int posY = (int) (green_dM01 / green_dArea);
             mGreenPosition = new Position(posX,posY);
+            updatePosition(Color.Green, mGreenPosition);
             green = "Green AREA";
         } else {
             green = "";
@@ -340,6 +343,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
             int posX = (int) (blue_dM10 / blue_dArea);
             int posY = (int) (blue_dM01 / blue_dArea);
             mBluePosition = new Position(posX,posY);
+            updatePosition(Color.Blue, mBluePosition);
             blue = "Blue AREA";
         } else {
             mBluePosition = new Position(0,0);
@@ -408,8 +412,21 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
                 Core.FONT_HERSHEY_SIMPLEX, dTextScaleFactor, colorRed, 2);
     }
 
-    private void updatePosition(Color color, String mSessionName, Position position) {
+    private void updatePosition(final Color color, final Position position) {
+        Firebase ref = myFirebaseRef.child(mSessionName).child(color.toString());
+        ref.addListenerForSingleValueEvent(new ValueEventListener() {
+            @Override
+            public void onDataChange(DataSnapshot dataSnapshot) {
+                Map<String, Position> dataPosition = new HashMap<>();
+                dataPosition.put(mPositionID, position);
+                myFirebaseRef.child(mSessionName).child(color.toString()).setValue(dataPosition);
+            }
 
+            @Override
+            public void onCancelled(FirebaseError firebaseError) {
+
+            }
+        });
     }
 
     private void erodeDilate(Mat matrix) {
