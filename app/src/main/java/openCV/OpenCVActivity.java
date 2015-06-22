@@ -2,10 +2,13 @@ package openCV;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
 import android.hardware.Camera;
+import android.net.Uri;
 import android.os.Bundle;
 import android.util.DisplayMetrics;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.SurfaceView;
 import android.view.WindowManager;
@@ -48,15 +51,22 @@ import Utils.Utils;
 
 public class OpenCVActivity extends Activity implements CvCameraViewListener {
 
+    public static final int VIEW_MODE_RGBA = 0;
+    public static final int VIEW_MODE_FILTERED = 1;
+    public static int viewMode = VIEW_MODE_RGBA;
+
     private CascadeClassifier mCascade;
 
     private boolean bShootNow = false, bDisplayTitle = true;
     private byte[] byteColourTrackCentreHue;
     private double dTextScaleFactor;
 
-    private Position mRedPosition = new Position(0,0);
-    private Position mGreenPosition = new Position(0,0);
-    private Position mBluePosition = new Position(0,0);
+    private Position mRedPosition = new Position(0, 0);
+    private Position mGreenPosition = new Position(0, 0);
+    private Position mBluePosition = new Position(0, 0);
+    private boolean redAreaFound = false;
+    private boolean greenAreaFound = false;
+    private boolean blueAreaFound = false;
 
     private int iNumberOfCameras = 0;
 
@@ -66,8 +76,9 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
     //FOR FPS AND SAVING IMAGES
     private long lFrameCount = 0, lMilliStart = 0, lMilliNow = 0, lMilliShotTime = 0;
 
-    private Mat mRgba, mIntermediateMat, mMatRed, mMatGreen, mMatBlue,
-            mHSVMat, mErodeKernel;
+    private Mat mRgba, mIntermediateMat, mMatRed,
+            mMatGreen, mMatBlue,
+            mHSVMat;
 
     private Scalar colorRed, colorGreen;
     private Size sSize3;
@@ -75,7 +86,6 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
     private String mSessionName;
     private Firebase myFirebaseRef;
     public static final String mPositionID = "position";
-
 
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -133,6 +143,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
         }
     };
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -149,20 +160,21 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
 
         mOpenCvCameraView0 = (JavaCameraView) findViewById(R.id.java_surface_view0);
 
-        if (iNumberOfCameras > 1)
+        if (iNumberOfCameras > 1) {
             mOpenCvCameraView1 = (JavaCameraView) findViewById(R.id.java_surface_view1);
+        }
+
+        mRedPosition = new Position(0, 0);
+        mGreenPosition = new Position(0, 0);
+        mBluePosition = new Position(0, 0);
+        redAreaFound = false;
+        greenAreaFound = false;
+        blueAreaFound = false;
 
         mOpenCvCameraView0.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView0.setCvCameraViewListener(this);
 
         mOpenCvCameraView0.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-
-//        if (iNumberOfCameras > 1) {
-//            mOpenCvCameraView1.setVisibility(SurfaceView.GONE);
-//            mOpenCvCameraView1.setCvCameraViewListener(this);
-//            mOpenCvCameraView1.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
-//        }
-
         OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_9, this, mLoaderCallback);
     }
 
@@ -201,6 +213,19 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
         return true;
     }
 
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        if (item.getItemId() == R.id.action_rgbpreview) {
+            viewMode = VIEW_MODE_RGBA;
+            lFrameCount = 0;
+            lMilliStart = 0;
+        } else if (item.getItemId() == R.id.action_filtered) {
+            viewMode = VIEW_MODE_FILTERED;
+            lFrameCount = 0;
+            lMilliStart = 0;
+        }
+        return true;
+    }
 
 
     @Override
@@ -247,23 +272,21 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
         mMatGreen.release();
         mMatBlue.release();
         mHSVMat.release();
-        mErodeKernel.release();
 
     }
 
+
     @Override
     public Mat onCameraFrame(Mat inputFrame) {
-        String sShotText = "";
         String string = "";
-
-        mErodeKernel = Imgproc.getStructuringElement(Imgproc.MORPH_CROSS, sSize3);
+        String sShotText = "";
 
         // start the timing counter to put the framerate on screen
         // and make sure the start time is up to date, do
         // a reset every 10 seconds
-        if (lMilliStart == 0) {
+        if (lMilliStart == 0)
             lMilliStart = System.currentTimeMillis();
-        }
+
         if ((lMilliNow - lMilliStart) > 10000) {
             lMilliStart = System.currentTimeMillis();
             lFrameCount = 0;
@@ -271,137 +294,156 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
 
         inputFrame.copyTo(mRgba);
 
+        switch (viewMode) {
+
+            case VIEW_MODE_RGBA:
+
+                if (bDisplayTitle)
+                    ShowTitle("BGR Preview", 1, colorGreen);
+
+                break;
+            case VIEW_MODE_FILTERED:
+
+
+                // start the timing counter to put the framerate on screen
+                // and make sure the start time is up to date, do
+                // a reset every 10 seconds
+                if (lMilliStart == 0) {
+                    lMilliStart = System.currentTimeMillis();
+                }
+                if ((lMilliNow - lMilliStart) > 10000) {
+                    lMilliStart = System.currentTimeMillis();
+                    lFrameCount = 0;
+                }
+
+                inputFrame.copyTo(mRgba);
+
 //            Color Detection
-       // Convert the image into an HSV image
-        Imgproc.cvtColor(mRgba, mHSVMat, Imgproc.COLOR_RGB2HSV);
-        mMatRed = mHSVMat.clone();
-        mMatGreen = mHSVMat.clone();
-        mMatBlue = mHSVMat.clone();
+                // Convert the image into an HSV image
+                Imgproc.cvtColor(mRgba, mHSVMat, Imgproc.COLOR_RGB2HSV);
+                mMatRed = mHSVMat.clone();
+                mMatGreen = mHSVMat.clone();
+                mMatBlue = mHSVMat.clone();
 
-        Mat lower_red_hue = mRgba.clone();
-        Mat upper_red_hue = mRgba.clone();
-        Core.inRange(mHSVMat, new Scalar(0, 100, 100), new Scalar(10, 255, 255), lower_red_hue);
-        Core.inRange(mHSVMat, new Scalar(160, 100, 100), new Scalar(179, 255, 255), upper_red_hue);
-        Core.addWeighted(lower_red_hue, 1.0, upper_red_hue, 1.0, 0.0, mMatRed);
-        Core.inRange(mMatGreen, new Scalar(40, 100, 100), new Scalar(75, 255, 255), mMatGreen);
-        Core.inRange(mMatBlue, new Scalar(100, 0, 0), new Scalar(120, 255, 255), mMatBlue);
+                Mat lower_red_hue = mRgba.clone();
+                Mat upper_red_hue = mRgba.clone();
+                Core.inRange(mHSVMat, new Scalar(0, 100, 100), new Scalar(10, 255, 255), lower_red_hue);
+                Core.inRange(mHSVMat, new Scalar(160, 100, 100), new Scalar(179, 255, 255), upper_red_hue);
+                Core.addWeighted(lower_red_hue, 1.0, upper_red_hue, 1.0, 0.0, mMatRed);
+                Core.inRange(mMatGreen, new Scalar(40, 100, 100), new Scalar(75, 255, 255), mMatGreen);
+                Core.inRange(mMatBlue, new Scalar(100, 0, 0), new Scalar(120, 255, 255), mMatBlue);
 
-        Imgproc.GaussianBlur(mMatRed, mMatRed, new Size(9, 9), 2, 2);
-        Imgproc.GaussianBlur(mMatGreen, mMatGreen, new Size(9, 9), 2, 2);
-        Imgproc.GaussianBlur(mMatBlue, mMatBlue, new Size(9, 9), 2, 2);
+                Imgproc.GaussianBlur(mMatRed, mMatRed, new Size(9, 9), 2, 2);
+                Imgproc.GaussianBlur(mMatGreen, mMatGreen, new Size(9, 9), 2, 2);
+                Imgproc.GaussianBlur(mMatBlue, mMatBlue, new Size(9, 9), 2, 2);
 
 
-        lower_red_hue.release();
-        upper_red_hue.release();
+                lower_red_hue.release();
+                upper_red_hue.release();
 
 //        Core.inRange(mMatRed);
 
-        erodeDilate(mMatRed);
-        erodeDilate(mMatGreen);
-        erodeDilate(mMatBlue);
+                erodeDilate(mMatRed);
+                erodeDilate(mMatGreen);
+                erodeDilate(mMatBlue);
 
-        Moments RedMoments = Imgproc.moments(mMatRed);
-        Moments GreenMoments = Imgproc.moments(mMatGreen);
-        Moments BlueMoments = Imgproc.moments(mMatBlue);
-        double red_dM01 = RedMoments.get_m01();
-        double red_dM10 = RedMoments.get_m10();
-        double red_dArea = RedMoments.get_m00();
-        double green_dM01 = GreenMoments.get_m01();
-        double green_dM10 = GreenMoments.get_m10();
-        double green_dArea = GreenMoments.get_m00();
-        double blue_dM01 = BlueMoments.get_m01();
-        double blue_dM10 = BlueMoments.get_m10();
-        double blue_dArea = BlueMoments.get_m00();
+                Moments RedMoments = Imgproc.moments(mMatRed);
+                Moments GreenMoments = Imgproc.moments(mMatGreen);
+                Moments BlueMoments = Imgproc.moments(mMatBlue);
+                double red_dM01 = RedMoments.get_m01();
+                double red_dM10 = RedMoments.get_m10();
+                double red_dArea = RedMoments.get_m00();
+                double green_dM01 = GreenMoments.get_m01();
+                double green_dM10 = GreenMoments.get_m10();
+                double green_dArea = GreenMoments.get_m00();
+                double blue_dM01 = BlueMoments.get_m01();
+                double blue_dM10 = BlueMoments.get_m10();
+                double blue_dArea = BlueMoments.get_m00();
 
-        String red;
-        String green;
-        String blue;
-        // if the area <= 10000, I consider that the there are no object in the image and it's because of the noise, the area is not zero
-        if (red_dArea > 10000) {
-            //calculate the position of the ball
-            int posX = (int) (red_dM10 / red_dArea);
-            int posY = (int) (red_dM01 / red_dArea);
-            mRedPosition = new Position(posX,posY);
-            red = "RED AREA";
-            updatePosition(Color.Red, mRedPosition);
-        } else {
-            red = "";
-            mRedPosition = new Position(0,0);
+                String red;
+                String green;
+                String blue;
+                // if the area <= 10000, I consider that the there are no object in the image and it's because of the noise, the area is not zero
+                if (red_dArea > 10000 && !redAreaFound) {
+                    //calculate the position of the ball
+                    int posX = (int) (red_dM10 / red_dArea);
+                    int posY = (int) (red_dM01 / red_dArea);
+                    mRedPosition = new Position(posX, posY);
+                    red = "RED AREA";
+                    updatePosition(Color.Red, mRedPosition);
+                    redAreaFound = true;
+                } else {
+                    red = "";
+                }
+                if (green_dArea > 10000 && !greenAreaFound) {
+                    int posX = (int) (green_dM10 / green_dArea);
+                    int posY = (int) (green_dM01 / green_dArea);
+                    mGreenPosition = new Position(posX, posY);
+                    updatePosition(Color.Green, mGreenPosition);
+                    green = "Green AREA";
+                    greenAreaFound = true;
+                } else {
+                    green = "";
+                }
+                if (blue_dArea > 10000 && !blueAreaFound) {
+                    int posX = (int) (blue_dM10 / blue_dArea);
+                    int posY = (int) (blue_dM01 / blue_dArea);
+                    mBluePosition = new Position(posX, posY);
+                    updatePosition(Color.Blue, mBluePosition);
+                    blue = "Blue AREA";
+                    blueAreaFound = true;
+                } else {
+                    blue = "";
+                }
 
-        }
-        if (green_dArea > 10000) {
-            int posX = (int) (green_dM10 / green_dArea);
-            int posY = (int) (green_dM01 / green_dArea);
-            mGreenPosition = new Position(posX,posY);
-            updatePosition(Color.Green, mGreenPosition);
-            green = "Green AREA";
-        } else {
-            green = "";
-            mGreenPosition = new Position(0,0);
-        }
-        if (blue_dArea > 10000) {
-            int posX = (int) (blue_dM10 / blue_dArea);
-            int posY = (int) (blue_dM01 / blue_dArea);
-            mBluePosition = new Position(posX,posY);
-            updatePosition(Color.Blue, mBluePosition);
-            blue = "Blue AREA";
-        } else {
-            mBluePosition = new Position(0,0);
-            blue = "";
-        }
+                List<MatOfPoint> contours = new ArrayList<>();
+                Imgproc.findContours(mMatRed, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+                Imgproc.drawContours(mMatRed, contours, -1, new Scalar(255, 255, 0));
+                contours.clear();
+                Imgproc.findContours(mMatGreen, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+                Imgproc.drawContours(mMatGreen, contours, -1, new Scalar(255, 255, 0));
+                contours.clear();
+                Imgproc.findContours(mMatBlue, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+                Imgproc.drawContours(mMatBlue, contours, -1, new Scalar(255, 255, 0));
+                contours.clear();
 
-        List<MatOfPoint> contours = new ArrayList<>();
-        Imgproc.findContours(mMatRed, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
-        Imgproc.drawContours(mMatRed, contours, -1, new Scalar(255, 255, 0));
-        contours.clear();
-        Imgproc.findContours(mMatGreen, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
-        Imgproc.drawContours(mMatGreen, contours, -1, new Scalar(255, 255, 0));
-        contours.clear();
-        Imgproc.findContours(mMatBlue, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
-        Imgproc.drawContours(mMatBlue, contours, -1, new Scalar(255, 255, 0));
-        contours.clear();
-
-        Core.addWeighted(mMatBlue, 1.0, mMatGreen, 1.0, 0.0, mMatBlue);
-        Core.addWeighted(mMatBlue, 1.0, mMatRed, 1.0, 0.0, mMatRed);
-        mRgba = mMatRed;
+                Core.addWeighted(mMatBlue, 1.0, mMatGreen, 1.0, 0.0, mMatBlue);
+                Core.addWeighted(mMatBlue, 1.0, mMatRed, 1.0, 0.0, mMatRed);
+                mRgba = mMatRed;
 
 
-        showTextAtColorContour(red, mRedPosition);
-        showTextAtColorContour(green, mGreenPosition);
-        showTextAtColorContour(blue, mBluePosition);
+                showTextAtColorContour(red, mRedPosition);
+                showTextAtColorContour(green, mGreenPosition);
+                showTextAtColorContour(blue, mBluePosition);
 
-        if (bDisplayTitle) {
-            ShowTitle("Color Detection", 1, colorGreen);
+                break;
+
         }
         // get the time now in every frame
         lMilliNow = System.currentTimeMillis();
 
         // update the frame counter
         lFrameCount++;
+
         if (bDisplayTitle) {
             string = String.format("FPS: %2.1f", (float) (lFrameCount * 1000) / (float) (lMilliNow - lMilliStart));
 
-            ShowTitle(string, 2, colorRed);
+            ShowTitle(string, 2, colorGreen);
         }
+
         if (bShootNow) {
             // get the time of the attempt to save a screenshot
             lMilliShotTime = System.currentTimeMillis();
             bShootNow = false;
 
             // try it, and set the screen text accordingly.
-            // this text is shown at the end of each frame until 
+            // this text is shown at the end of each frame until
             // 1.5 seconds has elapsed
-            if (Utils.SaveImage(mRgba, mIntermediateMat)) {
-                sShotText = "SCREENSHOT SAVED";
-            } else {
-                sShotText = "SCREENSHOT FAILED";
-            }
 
         }
 
-        if (System.currentTimeMillis() - lMilliShotTime < 1500){
+        if (System.currentTimeMillis() - lMilliShotTime < 1500)
             ShowTitle(sShotText, 3, colorRed);
-        }
 
         return mRgba;
     }
@@ -431,7 +473,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
 
     private void erodeDilate(Mat matrix) {
         //morphological opening (remove small objects from the foreground)
-        Imgproc.erode(matrix, matrix, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new  Size(10, 10)));
+        Imgproc.erode(matrix, matrix, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(10, 10)));
         Imgproc.dilate(matrix, matrix, Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(10, 10)));
 
         //morphological closing (fill small holes in the foreground)
