@@ -371,7 +371,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
                     mRedPosition = new Position(posX, posY);
                     red = "RED AREA";
                     updatePosition(Color.Red, mRedPosition);
-                    redAreaFound = true;
+//                    redAreaFound = true;
                 } else {
                     red = "";
                 }
@@ -381,7 +381,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
                     mGreenPosition = new Position(posX, posY);
                     updatePosition(Color.Green, mGreenPosition);
                     green = "Green AREA";
-                    greenAreaFound = true;
+//                    greenAreaFound = true;
                 } else {
                     green = "";
                 }
@@ -391,7 +391,7 @@ public class OpenCVActivity extends Activity implements CvCameraViewListener {
                     mBluePosition = new Position(posX, posY);
                     updatePosition(Color.Blue, mBluePosition);
                     blue = "Blue AREA";
-                    blueAreaFound = true;
+//                    blueAreaFound = true;
                 } else {
                     blue = "";
                 }
